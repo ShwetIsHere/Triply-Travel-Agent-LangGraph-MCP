@@ -50,17 +50,6 @@ if not GROQ_API_KEY:
 if not Gemini_API_KEY:
     raise ValueError("Gemini_API_KEY is missing. Please add it to your .env file.")
 
-# =========================
-# LLM
-# =========================
-
-# llm = ChatGroq(
-#     model="meta-llama/llama-prompt-guard-2-86m",
-#     temperature=0,
-#     api_key=GROQ_API_KEY,
-#     max_tokens=512
-# )
-
 
 itinerary_llm = ChatGroq(
     model="openai/gpt-oss-120b",
