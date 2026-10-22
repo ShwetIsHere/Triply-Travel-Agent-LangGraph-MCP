@@ -364,3 +364,74 @@ def run_travel_agent(user_input: str, thread_id: str | None = None):
         "itinerary": result.get("itinerary", ""),
         "llm_calls": result.get("llm_calls", 0),
     }
+
+
+def stream_travel_agent(user_input: str, thread_id: str | None = None):
+    if not thread_id:
+        thread_id = f"user_{uuid.uuid4().hex}"
+
+    config = {
+        "configurable": {
+            "thread_id": thread_id
+        }
+    }
+
+    initial_state = {
+        "messages": [
+            HumanMessage(content=user_input)
+        ],
+        "user_query": user_input,
+        "flight_results": "",
+        "hotel_results": "",
+        "weather_results": "",
+        "itinerary": "",
+        "answer": "",
+        "llm_calls": 0
+    }
+
+    yield {
+        "event": "node_start",
+        "node": "flight_agent",
+        "thread_id": thread_id
+    }
+
+    node_sequence = ["flight_agent", "hotel_agent", "weather_agent", "itinerary_agent", "final_agent"]
+    accumulated_state = {}
+
+    try:
+        for event in travel_graph.stream(initial_state, config=config, stream_mode="updates"):
+            for node_name, node_update in event.items():
+                accumulated_state.update(node_update)
+                yield {
+                    "event": "node_complete",
+                    "node": node_name,
+                    "thread_id": thread_id
+                }
+                if node_name in node_sequence:
+                    idx = node_sequence.index(node_name)
+                    if idx + 1 < len(node_sequence):
+                        next_node = node_sequence[idx + 1]
+                        yield {
+                            "event": "node_start",
+                            "node": next_node,
+                            "thread_id": thread_id
+                        }
+
+        final_answer = accumulated_state.get("answer") or ""
+
+        yield {
+            "event": "complete",
+            "thread_id": thread_id,
+            "answer": final_answer,
+            "flight_results": accumulated_state.get("flight_results", ""),
+            "hotel_results": accumulated_state.get("hotel_results", ""),
+            "weather_results": accumulated_state.get("weather_results", ""),
+            "itinerary": accumulated_state.get("itinerary", ""),
+            "llm_calls": accumulated_state.get("llm_calls", 0),
+        }
+    except Exception as e:
+        yield {
+            "event": "error",
+            "error": str(e),
+            "thread_id": thread_id
+        }

@@ -1,14 +1,15 @@
 from pathlib import Path
+import json
 import traceback
 import uvicorn
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from backend import run_travel_agent
+from backend import run_travel_agent, stream_travel_agent
 
 # this is to allow nested event loops for async calls in fast api
 import nest_asyncio
@@ -48,6 +49,43 @@ async def home(request: Request):
         request=request,
         name="index.html",
         context={}
+    )
+
+
+@app.post("/api/travel/stream")
+def travel_planner_stream(request_data: TravelRequest):
+    user_message = request_data.message.strip()
+
+    if not user_message:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error": "Message cannot be empty."
+            }
+        )
+
+    def event_stream():
+        try:
+            for event in stream_travel_agent(user_message, request_data.thread_id):
+                payload = json.dumps(event)
+                yield f"data: {payload}\n\n"
+        except Exception as e:
+            traceback.print_exc()
+            err_payload = json.dumps({
+                "event": "error",
+                "error": str(e)
+            })
+            yield f"data: {err_payload}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
     )
 
 

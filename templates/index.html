@@ -7,7 +7,7 @@
 
     <title>Triply AI</title>
 
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=2.2">
 </head>
 
 <body>
@@ -82,6 +82,125 @@
 
         </section>
 
+        <!-- Travel Agent Workflow Stepper (Progress Card) -->
+        <section id="agentProgressSection" class="agent-progress-card hidden">
+            <div class="progress-card-header">
+                <div class="progress-title-wrap">
+                    <div class="progress-plane-badge">✈️</div>
+                    <div>
+                        <h3>Orchestrating Travel Agents</h3>
+                        <p id="agentStatusText">Flight Agent is analyzing optimal routes & airports via AviationStack...</p>
+                    </div>
+                </div>
+                <div class="agent-active-badge">
+                    <span class="pulse-dot"></span>
+                    <span id="agentActiveLabel">Agent 1 of 5</span>
+                </div>
+            </div>
+
+            <div class="stepper-wrapper">
+                <div class="stepper-track-bg"></div>
+                <div id="stepperTrackFill" class="stepper-track-fill"></div>
+
+                <div class="stepper-steps">
+                    <!-- Step 1: Flights -->
+                    <div class="stepper-step active" id="step-1">
+                        <div class="step-caret-wrap">
+                            <svg class="step-caret-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </div>
+                        <div class="step-circle">
+                            <span class="step-num">1</span>
+                            <svg class="step-check-svg hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <div class="step-label-wrap">
+                            <span class="step-title">Flights</span>
+                            <span class="step-agent-name">AviationStack</span>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Hotels -->
+                    <div class="stepper-step" id="step-2">
+                        <div class="step-caret-wrap">
+                            <svg class="step-caret-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </div>
+                        <div class="step-circle">
+                            <span class="step-num">2</span>
+                            <svg class="step-check-svg hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <div class="step-label-wrap">
+                            <span class="step-title">Hotels</span>
+                            <span class="step-agent-name">Tavily</span>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Weather -->
+                    <div class="stepper-step" id="step-3">
+                        <div class="step-caret-wrap">
+                            <svg class="step-caret-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </div>
+                        <div class="step-circle">
+                            <span class="step-num">3</span>
+                            <svg class="step-check-svg hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <div class="step-label-wrap">
+                            <span class="step-title">Weather</span>
+                            <span class="step-agent-name">OpenWeather</span>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Itinerary -->
+                    <div class="stepper-step" id="step-4">
+                        <div class="step-caret-wrap">
+                            <svg class="step-caret-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </div>
+                        <div class="step-circle">
+                            <span class="step-num">4</span>
+                            <svg class="step-check-svg hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <div class="step-label-wrap">
+                            <span class="step-title">Itinerary</span>
+                            <span class="step-agent-name">Groq LLM</span>
+                        </div>
+                    </div>
+
+                    <!-- Step 5: Finalize -->
+                    <div class="stepper-step" id="step-5">
+                        <div class="step-caret-wrap">
+                            <svg class="step-caret-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </div>
+                        <div class="step-circle">
+                            <span class="step-num">5</span>
+                            <svg class="step-check-svg hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <div class="step-label-wrap">
+                            <span class="step-title">Finalize</span>
+                            <span class="step-agent-name">Gemini LLM</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section id="resultSection" class="result-section hidden">
 
             <div class="result-header">
@@ -113,7 +232,7 @@
     </main>
 
     <footer>
-        Built with FastAPI, LangGraph, Groq, PostgreSQL, Tavily and AviationStack
+        Built with FastAPI, LangGraph, Groq, PostgreSQL, OpenWeather, Tavily and AviationStack
     </footer>
 
     <!-- Markdown Renderer -->
@@ -123,7 +242,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Your Custom JS -->
-    <script src="/static/script.js"></script>
+    <script src="/static/script.js?v=2.2"></script>
 
 </body>
 </html>
