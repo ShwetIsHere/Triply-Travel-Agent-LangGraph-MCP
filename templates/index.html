@@ -7,7 +7,7 @@
 
     <title>Triply AI</title>
 
-    <link rel="stylesheet" href="/static/style.css?v=2.2">
+    <link rel="stylesheet" href="/static/style.css?v=2.4">
 </head>
 
 <body>
@@ -32,6 +32,18 @@
             <p>
                 Search flights, discover hotels, and generate a complete travel itinerary using a multi-agent LangGraph system.
             </p>
+
+            <div class="hero-actions">
+                <a href="https://www.heyshwet.me/" target="_blank" rel="noopener noreferrer" class="glossy-portfolio-btn">
+                    <span class="glossy-sparkle">✨</span>
+                    <span class="glossy-btn-text">Crafted by Shwet</span>
+                    <span class="glossy-btn-pill">Visit Portfolio</span>
+                    <svg class="glossy-btn-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="7" y1="17" x2="17" y2="7"></line>
+                        <polyline points="7 7 17 7 17 17"></polyline>
+                    </svg>
+                </a>
+            </div>
         </section>
 
         <section class="planner-card">
@@ -57,7 +69,7 @@
                 ></textarea>
 
                 <button id="sendBtn" onclick="sendMessage()">
-                    <span id="btnText">Generate Plan</span>
+                    <span id="btnText">✨ Generate Plan</span>
                     <span id="btnLoader" class="loader hidden"></span>
                 </button>
             </div>
@@ -99,8 +111,10 @@
             </div>
 
             <div class="stepper-wrapper">
-                <div class="stepper-track-bg"></div>
-                <div id="stepperTrackFill" class="stepper-track-fill"></div>
+                <div class="stepper-track-container">
+                    <div class="stepper-track-bg"></div>
+                    <div id="stepperTrackFill" class="stepper-track-fill"></div>
+                </div>
 
                 <div class="stepper-steps">
                     <!-- Step 1: Flights -->
@@ -242,7 +256,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Your Custom JS -->
-    <script src="/static/script.js?v=2.2"></script>
+    <script src="/static/script.js?v=2.4"></script>
 
 </body>
 </html>
