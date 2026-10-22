@@ -20,21 +20,22 @@ all coordinated through a LangGraph workflow.
 - Multi-agent orchestration with LangGraph
 - Structured travel itinerary generation
 - FastAPI backend with a simple web interface
-- Conversation state persistence using PostgreSQL
-- LLM-powered responses with Groq
+- In-memory conversation state persistence
+- LLM-powered responses with Groq & Gemini
+- Model Context Protocol (MCP) tool integrations (Tavily, AviationStack, Weather)
 
 ## Tech Stack
 
-- Python 3.10+
+- Python 3.10+ (or Conda environment)
 - FastAPI
 - Jinja2 + HTML/CSS/JavaScript frontend
-- LangGraph
-- LangChain
+- LangGraph & LangChain
+- Model Context Protocol (MCP)
 - Groq LLMs
 - Gemini LLMs
-- PostgreSQL
 - Tavily API
 - AviationStack API
+- OpenWeatherMap API
 
 ## Project Structure
 
@@ -52,36 +53,35 @@ all coordinated through a LangGraph workflow.
 
 Before running the project locally, make sure you have:
 
-- Python 3.10 or newer installed
-- PostgreSQL running and accessible
+- Python 3.10 or newer (or Conda `travel` environment)
 - API keys for:
   - Groq
   - Gemini
   - Tavily
   - AviationStack
+  - OpenWeatherMap
 
 ## Environment Variables
 
 Create a .env file in the project root with the following variables:
 
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/travel_db
 GROQ_API_KEY=your_groq_api_key
 GEMINI_API_KEY=your_gemini_api_key
 AVIATIONSTACK_API_KEY=your_aviationstack_api_key
 TAVILY_API_KEY=your_tavily_api_key
+OPENWEATHER_API_KEY=your_openweather_api_key
 DEFAULT_ORIGIN_IATA=BDQ
 ```
 
-## Installation
+## Running the App
+
+Using Conda:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate   # On Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+conda activate travel
+python app.py
 ```
-
-## Running the App
 
 Start the FastAPI server:
 

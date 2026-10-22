@@ -1,4 +1,5 @@
 import os
+import sys
 import asyncio
 import certifi
 
@@ -10,6 +11,10 @@ os.environ["SSL_CERT_FILE"] = certifi.where()
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
 load_dotenv()
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WEATHER_SERVER_SCRIPT = os.path.join(BASE_DIR, "custom_weather_mcp_server.py")
+PYTHON_EXE = sys.executable if sys.executable else r"C:\Users\SHWET\.conda\envs\travel\python.exe"
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 AVIATIONSTACK_API_KEY = os.getenv("AVIATIONSTACK_API_KEY")
@@ -46,9 +51,9 @@ client = MultiServerMCPClient(
 
         "weather": {
             "transport": "stdio",
-            "command": r"C:\Users\SHWET\.conda\envs\travel\python.exe",
+            "command": PYTHON_EXE,
             "args": [
-                r"custom_weather_mcp_server.py"
+                WEATHER_SERVER_SCRIPT
             ],
             "env": {
                 "OPENWEATHER_API_KEY": OPENWEATHER_API_KEY

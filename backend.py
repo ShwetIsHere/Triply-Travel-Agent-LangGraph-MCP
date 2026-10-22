@@ -12,11 +12,8 @@ from typing import TypedDict, Annotated
 import operator
 import uuid
 
-import psycopg
-from psycopg.rows import dict_row
-
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import (
     AnyMessage,
     HumanMessage,
@@ -28,22 +25,6 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 # from tools.tavily_tool import tavily_search
 from mcp_client import tavily_mcp_search, aviation_mcp_call, extract_destination, forecast_mcp_search, weather_mcp_search
 # from tools.flight_tool import search_flights
-
-# database
-def get_database_url():
-    database_url = os.getenv("DATABASE_URL")
-
-    if not database_url:
-        raise ValueError(
-            "DATABASE_URL is missing. Please add your Render PostgreSQL External Database URL to .env"
-        )
-
-    if "sslmode=" not in database_url:
-        separator = "&" if "?" in database_url else "?"
-        database_url = f"{database_url}{separator}sslmode=require"
-
-    return database_url
-
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 Gemini_API_KEY = os.getenv("Gemini_API_KEY")
@@ -335,19 +316,9 @@ graph.add_edge("final_agent", END)
 
 
 # =========================
-# PostgreSQL Checkpointer
+# In-Memory Checkpointer
 # =========================
-DATABASE_URL = get_database_url()
-
-_conn = psycopg.connect(
-    DATABASE_URL,
-    autocommit=True,
-    row_factory=dict_row
-)
-
-checkpointer = PostgresSaver(_conn)
-checkpointer.setup()
-
+checkpointer = MemorySaver()
 travel_graph = graph.compile(checkpointer=checkpointer)
 
 
