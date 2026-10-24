@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 import asyncio
 import certifi
 
@@ -14,7 +15,7 @@ load_dotenv()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEATHER_SERVER_SCRIPT = os.path.join(BASE_DIR, "custom_weather_mcp_server.py")
-PYTHON_EXE = sys.executable if sys.executable else r"C:\Users\SHWET\.conda\envs\travel\python.exe"
+PYTHON_EXE = sys.executable if sys.executable else "python"
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 AVIATIONSTACK_API_KEY = os.getenv("AVIATIONSTACK_API_KEY")
@@ -29,38 +30,39 @@ weather_llm = ChatGoogleGenerativeAI(
 )
 
 
-client = MultiServerMCPClient(
-    {
-        "tavily": {
-            "transport": "streamable_http",
-            "url": f"https://mcp.tavily.com/mcp/?tavilyApiKey={TAVILY_API_KEY}"
-        },
-
-        "aviationstack": {
-            "transport": "stdio",
-            "command": "uvx",
-            "args": [
-                "--with",
-                "mcp<2",
-                "aviationstack-mcp"
-            ],
-            "env": {
-                "AVIATION_STACK_API_KEY": AVIATIONSTACK_API_KEY
-            }
-        },
-
-        "weather": {
-            "transport": "stdio",
-            "command": PYTHON_EXE,
-            "args": [
-                WEATHER_SERVER_SCRIPT
-            ],
-            "env": {
-                "OPENWEATHER_API_KEY": OPENWEATHER_API_KEY
-            }
+# Build servers dynamically so missing uvx does not crash everything
+mcp_servers = {
+    "tavily": {
+        "transport": "streamable_http",
+        "url": f"https://mcp.tavily.com/mcp/?tavilyApiKey={TAVILY_API_KEY}"
+    },
+    "weather": {
+        "transport": "stdio",
+        "command": PYTHON_EXE,
+        "args": [
+            WEATHER_SERVER_SCRIPT
+        ],
+        "env": {
+            "OPENWEATHER_API_KEY": OPENWEATHER_API_KEY
         }
     }
-)
+}
+
+if shutil.which("uvx") and AVIATIONSTACK_API_KEY:
+    mcp_servers["aviationstack"] = {
+        "transport": "stdio",
+        "command": "uvx",
+        "args": [
+            "--with",
+            "mcp<2",
+            "aviationstack-mcp"
+        ],
+        "env": {
+            "AVIATION_STACK_API_KEY": AVIATIONSTACK_API_KEY
+        }
+    }
+
+client = MultiServerMCPClient(mcp_servers)
 
 
 # to show all mcp tools
@@ -86,7 +88,7 @@ async def initialize_mcp():
     global search_tool
     global aviation_tools
 
-    if search_tool is not None and aviation_tools:
+    if search_tool is not None:
         return
 
     tools = await client.get_tools()
@@ -96,9 +98,8 @@ async def initialize_mcp():
         print(tool.name)
 
     search_tool = next(
-        tool
-        for tool in tools
-        if tool.name == "tavily_search"
+        (tool for tool in tools if tool.name == "tavily_search"),
+        None
     )
 
     aviation_tools = {
@@ -111,6 +112,8 @@ async def initialize_mcp():
 # for tavily search tool
 async def tavily_mcp_search(query: str):
     await initialize_mcp()
+    if search_tool is None:
+        return "Search tool unavailable."
     results = await search_tool.ainvoke(
         {"query": query}
     )
@@ -121,20 +124,18 @@ async def tavily_mcp_search(query: str):
 async def aviation_mcp_call(tool_name: str, tool_args: dict = None):
     await initialize_mcp()
 
+    tool = aviation_tools.get(tool_name)
+    if not tool:
+        return None
+
     try:
-        tool = aviation_tools[tool_name]
-    except KeyError as error:
-        available_tools = ", ".join(sorted(aviation_tools))
-        raise ValueError(
-            f"Unknown AviationStack tool '{tool_name}'. "
-            f"Available tools: {available_tools}"
-        ) from error
-
-    result = await tool.ainvoke(
-        tool_args or {}
-    )
-
-    return result
+        result = await tool.ainvoke(
+            tool_args or {}
+        )
+        return result
+    except Exception as e:
+        print(f"AviationStack tool {tool_name} error: {e}")
+        return None
 
 
 

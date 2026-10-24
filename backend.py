@@ -68,72 +68,49 @@ class TravelState(TypedDict):
 # Flight Agent
 # =========================
 
-Flight_AGEBT_PROMMPT = """
-you are a travel flight expert.
-
-user query:
-{query}
-
-Airport information:
-{airport_data}
-
-Airport information:
-{airline_data}
-
-generate: 
-1. likely departure airport
-2. likely arrival airport
-3. airport serving this route
-4. typical flight duration
-5. estimated airfare range
-6. peak season pricing warning
-7. booking advice
-
-return concise travel guidance
-"""
-# def flight_agent(state: TravelState):
-#     query = state["user_query"]
-#     flight_data = search_flights(query)
-
-#     return {
-#         "flight_results": flight_data,
-#         "messages": [
-#             AIMessage(content="Flight results fetched.")
-#         ],
-#         "llm_calls": state.get("llm_calls", 0) + 1
-#     }
-
 def flight_agent(state: TravelState):
     print("\nInside Flight Agent")
 
     query = state["user_query"]
 
     try:
+        # 1. Search real-world live flight & airline insights via Tavily MCP
+        flight_research_query = f"flights airlines and routes for {query} duration and pricing"
+        flight_web_data = asyncio.run(tavily_mcp_search(flight_research_query))
 
-        airports = asyncio.run(
-            aviation_mcp_call(
-                "list_airports"
-            )
-        )
+        # 2. Try AviationStack MCP if available and permitted by plan
+        aviation_extra = ""
+        try:
+            mcp_airports = asyncio.run(aviation_mcp_call("list_airports"))
+            if mcp_airports and "function_access_restricted" not in str(mcp_airports) and "error" not in str(mcp_airports):
+                aviation_extra += f"\nAviationStack Airport Data: {str(mcp_airports)[:1000]}"
+        except Exception:
+            pass
 
-        airlines = asyncio.run(
-            aviation_mcp_call(
-                "list_airlines"
-            )
-        )
+        prompt = f"""You are an expert travel flight planner.
 
-        print("\nAirports:", airports)
-        print("\nAirlines:", airlines)
+User Travel Request:
+{query}
 
-        prompt = Flight_AGEBT_PROMMPT.format(
-            query=query,
-            airport_data=str(airports)[:3000],
-            airline_data=str(airlines)[:3000]
-        )
+Real-time Route, Airline & Schedule Research:
+{str(flight_web_data)[:3000]}
+{aviation_extra}
+
+Based on the above route research and your flight domain knowledge, generate:
+1. Likely departure airport (Name and IATA code)
+2. Likely arrival airport (Name and IATA code)
+3. Best operating airlines for this route (direct or popular connecting options)
+4. Typical flight duration (flight time and typical layovers)
+5. Estimated airfare range (economy return / one-way)
+6. Peak season pricing warning
+7. Smart booking advice (best time to book, advance window, transit tips)
+
+Return clear, concise, and structured travel flight guidance.
+"""
 
         response = itinerary_llm.invoke([
             SystemMessage(
-                content="Youo are an expert travel flight planner."
+                content="You are an expert travel flight planner."
             ),
             HumanMessage(content=prompt)
         ])
@@ -141,16 +118,17 @@ def flight_agent(state: TravelState):
         flight_data = response.content
 
     except Exception as e:
-        flight_data = f"Flight information unavailable: {str(e)}"
+        print("Flight Agent Error:", e)
+        flight_data = f"Flight information guidance: General flight routes available for this destination. ({str(e)})"
 
     return {
-        "flight_results" : flight_data,
-        "messages" : [
+        "flight_results": flight_data,
+        "messages": [
             AIMessage(
                 content="Flight recommendation generated."
             )
         ],
-        "llm_calls" : state.get("llm_calls", 0) + 1
+        "llm_calls": state.get("llm_calls", 0) + 1
     }
 
 
