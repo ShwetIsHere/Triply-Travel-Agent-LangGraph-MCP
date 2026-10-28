@@ -695,6 +695,27 @@ async function handleFeedbackSubmit(event) {
                 warningBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
             }
         } else {
+            // Send client-side Web3Forms notification (bypasses Render cloud firewall and server IP restrictions)
+            try {
+                const accessKeyEl = document.getElementById("web3formsAccessKey");
+                const accessKey = accessKeyEl ? accessKeyEl.value : "40b1d287-62f8-4c21-ba35-c96cce85e2ef";
+
+                const w3FormData = new FormData();
+                w3FormData.append("access_key", accessKey);
+                w3FormData.append("name", "Triply AI User");
+                w3FormData.append("email", email);
+                w3FormData.append("subject", `🔔 [Triply AI] New Feedback from ${email}`);
+                w3FormData.append("from_name", "Triply AI Notifications");
+                w3FormData.append("message", `New User Feedback on Triply AI\n\nSubmitter Email: ${email}\nDate & Time: ${data.data?.created_at || new Date().toLocaleString()}\nFeedback ID: ${data.data?.id || "N/A"}\n\nFeedback:\n${feedback}`);
+
+                await fetch("https://api.web3forms.com/submit", {
+                    method: "POST",
+                    body: w3FormData
+                });
+            } catch (w3Err) {
+                console.warn("Client email notification error:", w3Err);
+            }
+
             // Success! Reset form and show thank you modal popup
             emailInput.value = "";
             textInput.value = "";

@@ -7,7 +7,7 @@
 
     <title>Triply AI</title>
 
-    <link rel="stylesheet" href="/static/style.css?v=2.9">
+    <link rel="stylesheet" href="/static/style.css?v=3.0">
 </head>
 
 <body>
@@ -276,7 +276,11 @@
                     </div>
                 </div>
 
-                <form id="feedbackForm" onsubmit="handleFeedbackSubmit(event)">
+                <form id="feedbackForm" action="https://api.web3forms.com/submit" method="POST" onsubmit="handleFeedbackSubmit(event)">
+                    <input type="hidden" name="access_key" id="web3formsAccessKey" value="40b1d287-62f8-4c21-ba35-c96cce85e2ef">
+                    <input type="hidden" name="from_name" value="Triply AI Feedback">
+                    <input type="hidden" name="subject" value="🔔 [Triply AI] New User Feedback">
+
                     <div class="feedback-form-grid">
                         <div class="form-group">
                             <label for="feedbackEmail">Your Email</label>
@@ -459,7 +463,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Your Custom JS -->
-    <script src="/static/script.js?v=2.9"></script>
+    <script src="/static/script.js?v=3.0"></script>
 
 </body>
 </html>
