@@ -6,6 +6,7 @@ import uuid
 import secrets
 import smtplib
 import threading
+import requests
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from pathlib import Path
@@ -148,24 +149,109 @@ def get_all_feedbacks() -> list[dict]:
 
 def send_feedback_email_sync(entry: dict):
     """
-    Sends an email alert using Gmail SMTP.
-    Works with Google App Passwords (16 characters).
+    Dispatches user feedback notification email.
+    Supports:
+      1. Web3Forms API (HTTPS Port 443 - Recommended for Render Free Tier where SMTP is blocked)
+      2. Resend API (HTTPS Port 443)
+      3. Gmail SMTP (Ports 465/587 - for localhost or unblocked hosts)
     """
+    user_email = entry.get("email", "Anonymous")
+    feedback_msg = entry.get("feedback", "")
+    created_at = entry.get("created_at", "")
+    entry_id = entry.get("id", "")
+    timestamp = entry.get("timestamp", "")
+    admin_to = os.getenv("ADMIN_NOTIFICATION_EMAIL", "shwetmanojbhai@gmail.com").strip().strip('\"\'')
+
+    # =========================================================================
+    # Strategy 1: Web3Forms (HTTPS Port 443 - Recommended on Render Free Tier)
+    # =========================================================================
+    web3forms_key = os.getenv("WEB3FORMS_ACCESS_KEY", "").strip().strip('\"\'')
+    if web3forms_key:
+        try:
+            payload = {
+                "access_key": web3forms_key,
+                "subject": f"🔔 [Triply AI] New Feedback from {user_email}",
+                "from_name": "Triply AI Notifications",
+                "email": user_email,
+                "to": admin_to,
+                "message": (
+                    f"New User Feedback on Triply AI\n\n"
+                    f"Submitter Email: {user_email}\n"
+                    f"Date & Time:     {created_at}\n"
+                    f"Feedback ID:     {entry_id}\n"
+                    f"Timestamp:       {timestamp}\n\n"
+                    f"Feedback Message:\n"
+                    f"-----------------------------------------\n"
+                    f"{feedback_msg}\n"
+                    f"-----------------------------------------"
+                )
+            }
+            resp = requests.post(
+                "https://api.web3forms.com/submit",
+                json=payload,
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
+                timeout=12
+            )
+            data = resp.json()
+            if resp.status_code == 200 and data.get("success"):
+                print(f"[Email Notification via Web3Forms] Success: {data.get('message')}")
+                return True
+            else:
+                print(f"[Email Notification via Web3Forms] Failed: {data}")
+        except Exception as w3_err:
+            print(f"[Email Notification Error - Web3Forms]: {w3_err}")
+
+    # =========================================================================
+    # Strategy 2: Resend API (HTTPS Port 443)
+    # =========================================================================
+    resend_key = os.getenv("RESEND_API_KEY", "").strip().strip('\"\'')
+    if resend_key:
+        try:
+            resp = requests.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {resend_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "from": "Triply AI <onboarding@resend.dev>",
+                    "to": [admin_to],
+                    "subject": f"🔔 [Triply AI] New Feedback from {user_email}",
+                    "html": f"""
+                    <h2>✈️ Triply AI — User Feedback</h2>
+                    <p><strong>Submitter Email:</strong> {user_email}</p>
+                    <p><strong>Date & Time:</strong> {created_at}</p>
+                    <p><strong>Feedback ID:</strong> {entry_id}</p>
+                    <p><strong>Timestamp:</strong> {timestamp}</p>
+                    <hr>
+                    <p><strong>User Feedback:</strong></p>
+                    <blockquote style="background: #f1f5f9; padding: 16px; border-left: 4px solid #0284c7; border-radius: 8px; font-size: 15px; line-height: 1.6;">
+                      {feedback_msg}
+                    </blockquote>
+                    """
+                },
+                timeout=12
+            )
+            if resp.status_code in [200, 201]:
+                print(f"[Email Notification via Resend] Successfully sent to {admin_to}")
+                return True
+            else:
+                print(f"[Email Notification via Resend] Failed with status {resp.status_code}: {resp.text}")
+        except Exception as resend_err:
+            print(f"[Email Notification Error - Resend]: {resend_err}")
+
+    # =========================================================================
+    # Strategy 3: Gmail SMTP (Ports 465/587 - Works on localhost or unblocked hosts)
+    # Note: Render Free Tier blocks outbound ports 25, 465, and 587.
+    # =========================================================================
     smtp_user = os.getenv("SMTP_EMAIL", "").strip().strip('\"\'')
     smtp_pass = os.getenv("SMTP_APP_PASSWORD", "").replace(" ", "").strip().strip('\"\'')
-    admin_to = os.getenv("ADMIN_NOTIFICATION_EMAIL", "").strip().strip('\"\'') or smtp_user
 
-    if not smtp_user or not smtp_pass or not admin_to:
-        print("[Email Notification] SMTP_EMAIL or SMTP_APP_PASSWORD not configured. Skipping email dispatch.")
+    if not smtp_user or not smtp_pass:
+        print("[Email Notification] Neither WEB3FORMS_ACCESS_KEY, RESEND_API_KEY, nor SMTP credentials configured. Skipping email dispatch.")
         return False
 
     try:
-        user_email = entry.get("email", "Anonymous")
-        feedback_msg = entry.get("feedback", "")
-        created_at = entry.get("created_at", "")
-        entry_id = entry.get("id", "")
-        timestamp = entry.get("timestamp", "")
-
         msg = MIMEMultipart("alternative")
         msg["Subject"] = f"🔔 [Triply AI] New Feedback from {user_email}"
         msg["From"] = f"Triply AI <{smtp_user}>"
@@ -317,21 +403,21 @@ def send_feedback_email_sync(entry: dict):
 
         # Try Port 465 SSL first; fallback to Port 587 STARTTLS
         try:
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=12) as server:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
                 server.login(smtp_user, smtp_pass)
                 server.sendmail(smtp_user, [admin_to], msg.as_string())
         except Exception as ssl_err:
             print(f"[Email Notification] Port 465 SSL failed ({ssl_err}), trying Port 587 STARTTLS...")
-            with smtplib.SMTP("smtp.gmail.com", 587, timeout=12) as server:
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
                 server.starttls()
                 server.login(smtp_user, smtp_pass)
                 server.sendmail(smtp_user, [admin_to], msg.as_string())
 
-        print(f"[Email Notification] Successfully dispatched feedback alert to {admin_to}")
+        print(f"[Email Notification via SMTP] Successfully dispatched feedback alert to {admin_to}")
         return True
 
     except Exception as e:
-        print(f"[Email Notification Error] Failed to send feedback alert: {e}")
+        print(f"[Email Notification Error - SMTP]: {e}")
         return False
 
 
