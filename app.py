@@ -1,15 +1,26 @@
 from pathlib import Path
 import json
+import re
 import traceback
 import uvicorn
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Header
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 from backend import run_travel_agent, stream_travel_agent
+from feedback_service import (
+    validate_feedback_with_gemini,
+    save_feedback,
+    get_all_feedbacks,
+    verify_admin_login,
+    update_admin_password,
+    create_admin_session,
+    is_valid_admin_session,
+    invalidate_admin_session,
+)
 
 # this is to allow nested event loops for async calls in fast api
 import nest_asyncio
@@ -40,6 +51,21 @@ templates = Jinja2Templates(
 class TravelRequest(BaseModel):
     message: str
     thread_id: str | None = None
+
+
+class FeedbackRequest(BaseModel):
+    email: str
+    feedback: str
+
+
+class AdminLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 
@@ -146,6 +172,155 @@ async def health_check():
 @app.get("/favicon.ico")
 async def favicon():
     return JSONResponse(content={})
+
+
+# ============================================================================
+# Feedback Endpoint
+# ============================================================================
+
+@app.post("/api/feedback")
+async def submit_feedback(request_data: FeedbackRequest):
+    email = request_data.email.strip()
+    feedback = request_data.feedback.strip()
+
+    if not email:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": "Email address is required."}
+        )
+
+    email_pattern = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+    if not re.match(email_pattern, email):
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": "Please enter a valid email address."}
+        )
+
+    if not feedback:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": "Feedback content cannot be empty."}
+        )
+
+    # Validate feedback with Gemini AI (content moderation & quality check)
+    is_valid, validation_msg = validate_feedback_with_gemini(feedback)
+
+    if not is_valid:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "error": validation_msg
+            }
+        )
+
+    # Save acceptable feedback into triply_feedback.json
+    saved_entry = save_feedback(email=email, feedback_text=feedback)
+
+    return JSONResponse(
+        content={
+            "success": True,
+            "message": "Thanks for your feedback! We appreciate you taking the time to help improve Triply AI.",
+            "data": saved_entry
+        }
+    )
+
+
+# ============================================================================
+# Hidden Admin Endpoints
+# ============================================================================
+
+def get_session_token(
+    authorization: str | None = Header(default=None),
+    x_admin_token: str | None = Header(default=None)
+) -> str | None:
+    if x_admin_token and x_admin_token.strip():
+        return x_admin_token.strip()
+    if authorization:
+        parts = authorization.strip().split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            return parts[1]
+        return authorization.strip()
+    return None
+
+
+@app.post("/api/admin/login")
+async def admin_login(creds: AdminLoginRequest):
+    if not verify_admin_login(creds.username, creds.password):
+        return JSONResponse(
+            status_code=401,
+            content={"success": False, "error": "Invalid username or password."}
+        )
+
+    token = create_admin_session()
+    return JSONResponse(
+        content={
+            "success": True,
+            "token": token,
+            "username": creds.username.strip(),
+            "message": "Login successful"
+        }
+    )
+
+
+@app.get("/api/admin/feedbacks")
+async def admin_feedbacks(request: Request):
+    token = get_session_token(
+        authorization=request.headers.get("authorization"),
+        x_admin_token=request.headers.get("x-admin-token")
+    )
+    if not is_valid_admin_session(token):
+        return JSONResponse(
+            status_code=401,
+            content={"success": False, "error": "Unauthorized. Session expired or invalid."}
+        )
+
+    feedbacks = get_all_feedbacks()
+    return JSONResponse(
+        content={
+            "success": True,
+            "feedbacks": feedbacks,
+            "total": len(feedbacks)
+        }
+    )
+
+
+@app.post("/api/admin/change-password")
+async def admin_change_password(payload: ChangePasswordRequest, request: Request):
+    token = get_session_token(
+        authorization=request.headers.get("authorization"),
+        x_admin_token=request.headers.get("x-admin-token")
+    )
+    if not is_valid_admin_session(token):
+        return JSONResponse(
+            status_code=401,
+            content={"success": False, "error": "Unauthorized. Please log in first."}
+        )
+
+    success, message = update_admin_password(
+        current_password=payload.current_password,
+        new_password=payload.new_password
+    )
+
+    if not success:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": message}
+        )
+
+    return JSONResponse(
+        content={"success": True, "message": message}
+    )
+
+
+@app.post("/api/admin/logout")
+async def admin_logout(request: Request):
+    token = get_session_token(
+        authorization=request.headers.get("authorization"),
+        x_admin_token=request.headers.get("x-admin-token")
+    )
+    invalidate_admin_session(token)
+    return JSONResponse(content={"success": True, "message": "Logged out successfully"})
 
 
 

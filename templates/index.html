@@ -7,7 +7,7 @@
 
     <title>Triply AI</title>
 
-    <link rel="stylesheet" href="/static/style.css?v=2.7">
+    <link rel="stylesheet" href="/static/style.css?v=2.9">
 </head>
 
 <body>
@@ -265,11 +265,192 @@
 
         <section id="errorBox" class="error-box hidden"></section>
 
+        <!-- User Feedback Section -->
+        <section class="feedback-section" id="feedbackSection">
+            <div class="feedback-card">
+                <div class="feedback-header">
+                    <div class="feedback-badge-icon">💬</div>
+                    <div>
+                        <h2>Share Your Feedback</h2>
+                        <p>Help us make Triply AI even better. Share your suggestions, reviews, or feature ideas.</p>
+                    </div>
+                </div>
+
+                <form id="feedbackForm" onsubmit="handleFeedbackSubmit(event)">
+                    <div class="feedback-form-grid">
+                        <div class="form-group">
+                            <label for="feedbackEmail">Your Email</label>
+                            <input 
+                                type="email" 
+                                id="feedbackEmail" 
+                                name="email" 
+                                placeholder="name@example.com" 
+                                required 
+                                autocomplete="email"
+                            />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="feedbackText">Your Feedback</label>
+                            <textarea 
+                                id="feedbackText" 
+                                name="feedback" 
+                                rows="4" 
+                                placeholder="Tell us what you liked, what can be improved, or suggestions for new features..." 
+                                required
+                            ></textarea>
+                        </div>
+                    </div>
+
+                    <div id="feedbackWarningBox" class="feedback-warning hidden">
+                        <span class="warning-icon">⚠️</span>
+                        <span id="feedbackWarningText">Feedback could not be accepted.</span>
+                    </div>
+
+                    <div class="feedback-actions">
+                        <button type="submit" id="feedbackSubmitBtn" class="feedback-submit-btn">
+                            <span class="btn-text">Submit Feedback</span>
+                            <span class="btn-loader hidden"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
     </main>
 
     <footer>
-        Built with FastAPI, LangGraph, Groq, PostgreSQL, OpenWeather, Tavily and AviationStack
+        Built with FastAPI, LangGraph, Groq, PostgreSQL, OpenWeather, Tavily and <span id="adminSecretTrigger" onclick="openAdminModal()">AviationStack</span>
     </footer>
+
+    <!-- Feedback Success Popup Modal -->
+    <div id="feedbackSuccessModal" class="modal-backdrop hidden" style="display: none;" onclick="closeFeedbackModal(event)">
+        <div class="modal-card success-popup-card">
+            <button type="button" class="modal-close-btn" onclick="closeFeedbackModal()">&times;</button>
+            <div class="success-popup-icon">🎉</div>
+            <h3>Thank You for Your Feedback!</h3>
+            <p>Your feedback has been successfully submitted and verified. We truly appreciate your input to make Triply AI better!</p>
+            <button type="button" class="modal-primary-btn" onclick="closeFeedbackModal()">
+                Awesome
+            </button>
+        </div>
+    </div>
+
+    <!-- Hidden Admin Modal (AviationStack Secret Trigger) -->
+    <div id="adminModal" class="modal-backdrop hidden" style="display: none;" onclick="handleAdminModalBackdrop(event)">
+        <div class="modal-card admin-modal-card">
+            <button type="button" class="modal-close-btn" aria-label="Close" onclick="closeAdminModal()">&times;</button>
+
+            <!-- 1. Admin Login View -->
+            <div id="adminLoginView" class="admin-view">
+                <div class="admin-modal-header">
+                    <div class="admin-badge-icon">🔐</div>
+                    <div>
+                        <h3>Admin Portal</h3>
+                        <p>Sign in to view submitted user feedback</p>
+                    </div>
+                </div>
+
+                <form id="adminLoginForm" onsubmit="handleAdminLogin(event)">
+                    <div class="form-group">
+                        <label for="adminUsername">Username</label>
+                        <input type="text" id="adminUsername" placeholder="Enter username" required autocomplete="username" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="adminPassword">Password</label>
+                        <input type="password" id="adminPassword" placeholder="Enter password" required autocomplete="current-password" />
+                    </div>
+
+                    <div id="adminLoginError" class="modal-alert-box error hidden"></div>
+
+                    <div class="admin-form-actions">
+                        <button type="submit" id="adminLoginBtn" class="modal-primary-btn">
+                            <span class="btn-text">Log In</span>
+                            <span class="btn-loader hidden"></span>
+                        </button>
+                    </div>
+
+                    <div class="admin-extra-links">
+                        <button type="button" class="text-link-btn" onclick="showChangePasswordView(true)">
+                            Forgot / Change Password?
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 2. Admin Feedbacks Dashboard View -->
+            <div id="adminDashboardView" class="admin-view hidden">
+                <div class="admin-modal-header">
+                    <div class="admin-badge-icon">📋</div>
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                            <h3>User Feedback Inbox</h3>
+                            <span class="admin-count-pill" id="adminFeedbackCount">0 Feedbacks</span>
+                        </div>
+                        <p>Feedbacks sorted latest first (descending order)</p>
+                    </div>
+                </div>
+
+                <div class="admin-toolbar">
+                    <button type="button" class="admin-sub-btn" onclick="loadAdminFeedbacks()">
+                        🔄 Refresh
+                    </button>
+                    <button type="button" class="admin-sub-btn" onclick="showChangePasswordView(false)">
+                        🔑 Change Password
+                    </button>
+                    <button type="button" class="admin-sub-btn logout-btn" onclick="handleAdminLogout()">
+                        🚪 Log Out
+                    </button>
+                </div>
+
+                <div id="adminFeedbackList" class="feedback-list-container">
+                    <!-- Populated dynamically via JS -->
+                </div>
+            </div>
+
+            <!-- 3. Change / Forgot Password View -->
+            <div id="adminChangePasswordView" class="admin-view hidden">
+                <div class="admin-modal-header">
+                    <div class="admin-badge-icon">🔑</div>
+                    <div>
+                        <h3>Change Password</h3>
+                        <p>Enter your current password first to verify identity</p>
+                    </div>
+                </div>
+
+                <form id="adminChangePwdForm" onsubmit="handleAdminChangePassword(event)">
+                    <div class="form-group">
+                        <label for="adminCurrentPwd">Current Password</label>
+                        <input type="password" id="adminCurrentPwd" placeholder="Enter current password" required />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="adminNewPwd">New Password</label>
+                        <input type="password" id="adminNewPwd" placeholder="Enter new password (min. 6 characters)" required />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="adminConfirmPwd">Confirm New Password</label>
+                        <input type="password" id="adminConfirmPwd" placeholder="Confirm new password" required />
+                    </div>
+
+                    <div id="adminChangePwdAlert" class="modal-alert-box hidden"></div>
+
+                    <div class="admin-form-actions">
+                        <button type="submit" id="adminSavePwdBtn" class="modal-primary-btn">
+                            <span class="btn-text">Update Password</span>
+                            <span class="btn-loader hidden"></span>
+                        </button>
+                        <button type="button" class="modal-secondary-btn" onclick="cancelChangePassword()">
+                            Cancel / Back
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+    </div>
 
     <!-- Markdown Renderer -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -278,7 +459,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Your Custom JS -->
-    <script src="/static/script.js?v=2.7"></script>
+    <script src="/static/script.js?v=2.9"></script>
 
 </body>
 </html>

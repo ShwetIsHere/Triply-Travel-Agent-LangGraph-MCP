@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# Triply Credentials & Feedback Data (Never commit to GitHub)
+triply_feedback.json
+triply_log_in_pass.json

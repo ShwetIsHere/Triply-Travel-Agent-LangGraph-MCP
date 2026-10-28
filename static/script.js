@@ -631,5 +631,431 @@ function downloadPDF() {
 document.addEventListener("keydown", function(event) {
     if (event.ctrlKey && event.key === "Enter") {
         sendMessage();
+    } else if (event.key === "Escape") {
+        closeAdminModal();
+        closeFeedbackModal();
     }
 });
+
+
+/* ============================================================================
+   Feedback Form Logic (Gemini Moderation + Popup)
+   ============================================================================ */
+
+async function handleFeedbackSubmit(event) {
+    event.preventDefault();
+    const emailInput = document.getElementById("feedbackEmail");
+    const textInput = document.getElementById("feedbackText");
+    const warningBox = document.getElementById("feedbackWarningBox");
+    const warningText = document.getElementById("feedbackWarningText");
+    const submitBtn = document.getElementById("feedbackSubmitBtn");
+
+    if (!emailInput || !textInput) return;
+
+    const email = emailInput.value.trim();
+    const feedback = textInput.value.trim();
+
+    if (!email || !feedback) {
+        if (warningBox && warningText) {
+            warningText.textContent = "Please fill out both email and feedback fields.";
+            warningBox.classList.remove("hidden");
+        }
+        return;
+    }
+
+    // Hide previous warning
+    if (warningBox) warningBox.classList.add("hidden");
+
+    // UI Loading state
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        const btnText = submitBtn.querySelector(".btn-text");
+        const btnLoader = submitBtn.querySelector(".btn-loader");
+        if (btnText) btnText.textContent = "Verifying with AI...";
+        if (btnLoader) btnLoader.classList.remove("hidden");
+    }
+
+    try {
+        const response = await fetch("/api/feedback", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ email: email, feedback: feedback })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            // Show Gemini rejection warning to user
+            const errorMsg = data.error || "Feedback could not be accepted. Please provide constructive and respectful feedback.";
+            if (warningBox && warningText) {
+                warningText.textContent = errorMsg;
+                warningBox.classList.remove("hidden");
+                warningBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+        } else {
+            // Success! Reset form and show thank you modal popup
+            emailInput.value = "";
+            textInput.value = "";
+            if (warningBox) warningBox.classList.add("hidden");
+            openFeedbackModal();
+        }
+    } catch (err) {
+        console.error("Feedback submit error:", err);
+        if (warningBox && warningText) {
+            warningText.textContent = "Network error while submitting feedback. Please try again.";
+            warningBox.classList.remove("hidden");
+        }
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            const btnText = submitBtn.querySelector(".btn-text");
+            const btnLoader = submitBtn.querySelector(".btn-loader");
+            if (btnText) btnText.textContent = "Submit Feedback";
+            if (btnLoader) btnLoader.classList.add("hidden");
+        }
+    }
+}
+
+function openFeedbackModal() {
+    const modal = document.getElementById("feedbackSuccessModal");
+    if (modal) {
+        modal.classList.remove("hidden");
+        modal.style.display = "flex";
+    }
+}
+
+function closeFeedbackModal(event) {
+    if (event && event.target && event.target.closest(".modal-card") && !event.target.classList.contains("modal-close-btn") && !event.target.classList.contains("modal-primary-btn")) {
+        return;
+    }
+    const modal = document.getElementById("feedbackSuccessModal");
+    if (modal) {
+        modal.classList.add("hidden");
+        modal.style.display = "none";
+    }
+}
+
+
+/* ============================================================================
+   Hidden Admin Portal (AviationStack Secret Trigger)
+   ============================================================================ */
+
+let adminCameFromLogin = true;
+
+function openAdminModal() {
+    const modal = document.getElementById("adminModal");
+    if (!modal) return;
+
+    modal.classList.remove("hidden");
+    modal.style.display = "flex";
+
+    // Check if token exists
+    const token = sessionStorage.getItem("admin_token");
+    if (token) {
+        showAdminDashboardView();
+        loadAdminFeedbacks();
+    } else {
+        showAdminLoginView();
+    }
+}
+
+function closeAdminModal(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    const modal = document.getElementById("adminModal");
+    if (modal) {
+        modal.classList.add("hidden");
+        modal.style.display = "none";
+    }
+}
+
+function handleAdminModalBackdrop(event) {
+    if (event && event.target && event.target.id === "adminModal") {
+        closeAdminModal();
+    }
+}
+
+function showAdminLoginView() {
+    const loginView = document.getElementById("adminLoginView");
+    const dashView = document.getElementById("adminDashboardView");
+    const pwdView = document.getElementById("adminChangePasswordView");
+    const loginErr = document.getElementById("adminLoginError");
+
+    if (loginView) loginView.classList.remove("hidden");
+    if (dashView) dashView.classList.add("hidden");
+    if (pwdView) pwdView.classList.add("hidden");
+    if (loginErr) loginErr.classList.add("hidden");
+}
+
+function showAdminDashboardView() {
+    const loginView = document.getElementById("adminLoginView");
+    const dashView = document.getElementById("adminDashboardView");
+    const pwdView = document.getElementById("adminChangePasswordView");
+
+    if (loginView) loginView.classList.add("hidden");
+    if (dashView) dashView.classList.remove("hidden");
+    if (pwdView) pwdView.classList.add("hidden");
+}
+
+function showChangePasswordView(fromLogin) {
+    adminCameFromLogin = fromLogin;
+    const loginView = document.getElementById("adminLoginView");
+    const dashView = document.getElementById("adminDashboardView");
+    const pwdView = document.getElementById("adminChangePasswordView");
+    const alertBox = document.getElementById("adminChangePwdAlert");
+
+    if (loginView) loginView.classList.add("hidden");
+    if (dashView) dashView.classList.add("hidden");
+    if (pwdView) pwdView.classList.remove("hidden");
+    if (alertBox) alertBox.classList.add("hidden");
+}
+
+function cancelChangePassword() {
+    if (adminCameFromLogin) {
+        showAdminLoginView();
+    } else {
+        showAdminDashboardView();
+    }
+}
+
+async function handleAdminLogin(event) {
+    event.preventDefault();
+    const userEl = document.getElementById("adminUsername");
+    const passEl = document.getElementById("adminPassword");
+    const errorBox = document.getElementById("adminLoginError");
+    const loginBtn = document.getElementById("adminLoginBtn");
+
+    if (!userEl || !passEl) return;
+    const username = userEl.value.trim();
+    const password = passEl.value;
+
+    if (errorBox) errorBox.classList.add("hidden");
+
+    if (loginBtn) {
+        loginBtn.disabled = true;
+        const btnText = loginBtn.querySelector(".btn-text");
+        if (btnText) btnText.textContent = "Signing In...";
+    }
+
+    try {
+        const response = await fetch("/api/admin/login", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ username: username, password: password })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            if (errorBox) {
+                errorBox.textContent = data.error || "Invalid username or password.";
+                errorBox.classList.remove("hidden");
+            }
+        } else {
+            sessionStorage.setItem("admin_token", data.token);
+            passEl.value = "";
+            showAdminDashboardView();
+            loadAdminFeedbacks();
+        }
+    } catch (err) {
+        console.error("Admin login error:", err);
+        if (errorBox) {
+            errorBox.textContent = "Network error during login. Please try again.";
+            errorBox.classList.remove("hidden");
+        }
+    } finally {
+        if (loginBtn) {
+            loginBtn.disabled = false;
+            const btnText = loginBtn.querySelector(".btn-text");
+            if (btnText) btnText.textContent = "Log In";
+        }
+    }
+}
+
+async function loadAdminFeedbacks() {
+    const listContainer = document.getElementById("adminFeedbackList");
+    const countBadge = document.getElementById("adminFeedbackCount");
+    const token = sessionStorage.getItem("admin_token");
+
+    if (!listContainer) return;
+    listContainer.innerHTML = '<div style="text-align: center; padding: 24px; color: #64748b;">Loading feedbacks...</div>';
+
+    try {
+        const response = await fetch("/api/admin/feedbacks", {
+            method: "GET",
+            headers: {
+                "X-Admin-Token": token || ""
+            }
+        });
+
+        if (response.status === 401) {
+            sessionStorage.removeItem("admin_token");
+            showAdminLoginView();
+            return;
+        }
+
+        const data = await response.json();
+
+        if (data.success && Array.isArray(data.feedbacks)) {
+            const feedbacks = data.feedbacks;
+            if (countBadge) {
+                countBadge.textContent = `${feedbacks.length} Feedback${feedbacks.length === 1 ? "" : "s"}`;
+            }
+
+            if (feedbacks.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="feedback-empty-state">
+                        <div class="empty-icon">📭</div>
+                        <h4>No Feedbacks Yet</h4>
+                        <p>User feedback submitted through the form will appear here in real-time.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Render feedbacks in descending order (latest on top)
+            listContainer.innerHTML = feedbacks.map(item => {
+                const safeEmail = escapeHtml(item.email || "Anonymous");
+                const safeTime = escapeHtml(item.created_at || "Just now");
+                const safeMsg = escapeHtml(item.feedback || "");
+
+                return `
+                    <div class="feedback-item-card">
+                        <div class="feedback-item-header">
+                            <span class="feedback-user-email">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                    <polyline points="22,6 12,13 2,6"></polyline>
+                                </svg>
+                                ${safeEmail}
+                            </span>
+                            <span class="feedback-timestamp">⏱️ ${safeTime}</span>
+                        </div>
+                        <div class="feedback-message-text">${safeMsg}</div>
+                    </div>
+                `;
+            }).join("");
+        } else {
+            listContainer.innerHTML = `<div style="text-align: center; color: #b91c1c; padding: 20px;">Failed to load feedback data.</div>`;
+        }
+    } catch (err) {
+        console.error("Error loading feedbacks:", err);
+        listContainer.innerHTML = `<div style="text-align: center; color: #b91c1c; padding: 20px;">Network error loading feedbacks.</div>`;
+    }
+}
+
+async function handleAdminChangePassword(event) {
+    event.preventDefault();
+    const currentPwdEl = document.getElementById("adminCurrentPwd");
+    const newPwdEl = document.getElementById("adminNewPwd");
+    const confirmPwdEl = document.getElementById("adminConfirmPwd");
+    const alertBox = document.getElementById("adminChangePwdAlert");
+    const submitBtn = document.getElementById("adminSavePwdBtn");
+    const token = sessionStorage.getItem("admin_token");
+
+    if (!currentPwdEl || !newPwdEl || !confirmPwdEl) return;
+
+    const currentPwd = currentPwdEl.value;
+    const newPwd = newPwdEl.value;
+    const confirmPwd = confirmPwdEl.value;
+
+    if (alertBox) {
+        alertBox.className = "modal-alert-box hidden";
+    }
+
+    if (newPwd !== confirmPwd) {
+        if (alertBox) {
+            alertBox.textContent = "New passwords do not match. Please re-check.";
+            alertBox.className = "modal-alert-box error";
+        }
+        return;
+    }
+
+    if (newPwd.length < 6) {
+        if (alertBox) {
+            alertBox.textContent = "New password must be at least 6 characters long.";
+            alertBox.className = "modal-alert-box error";
+        }
+        return;
+    }
+
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        const btnText = submitBtn.querySelector(".btn-text");
+        if (btnText) btnText.textContent = "Updating...";
+    }
+
+    try {
+        const response = await fetch("/api/admin/change-password", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Admin-Token": token || ""
+            },
+            body: JSON.stringify({
+                current_password: currentPwd,
+                new_password: newPwd
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            if (alertBox) {
+                alertBox.textContent = data.error || "Failed to update password.";
+                alertBox.className = "modal-alert-box error";
+            }
+        } else {
+            if (alertBox) {
+                alertBox.textContent = "✅ Password updated successfully! Stored in triply_log_in_pass.json.";
+                alertBox.className = "modal-alert-box success";
+            }
+            currentPwdEl.value = "";
+            newPwdEl.value = "";
+            confirmPwdEl.value = "";
+
+            setTimeout(() => {
+                cancelChangePassword();
+            }, 1800);
+        }
+    } catch (err) {
+        console.error("Change password error:", err);
+        if (alertBox) {
+            alertBox.textContent = "Network error while updating password.";
+            alertBox.className = "modal-alert-box error";
+        }
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            const btnText = submitBtn.querySelector(".btn-text");
+            if (btnText) btnText.textContent = "Update Password";
+        }
+    }
+}
+
+async function handleAdminLogout() {
+    const token = sessionStorage.getItem("admin_token");
+    try {
+        await fetch("/api/admin/logout", {
+            method: "POST",
+            headers: {
+                "X-Admin-Token": token || ""
+            }
+        });
+    } catch (e) {
+        // Ignore network errors on logout
+    }
+    sessionStorage.removeItem("admin_token");
+    showAdminLoginView();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+}
