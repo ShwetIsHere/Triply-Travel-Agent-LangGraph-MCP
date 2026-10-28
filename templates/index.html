@@ -7,7 +7,7 @@
 
     <title>Triply AI</title>
 
-    <link rel="stylesheet" href="/static/style.css?v=2.4">
+    <link rel="stylesheet" href="/static/style.css?v=2.7">
 </head>
 
 <body>
@@ -104,10 +104,27 @@
                         <p id="agentStatusText">Flight Agent is analyzing optimal routes & airports via AviationStack...</p>
                     </div>
                 </div>
-                <div class="agent-active-badge">
-                    <span class="pulse-dot"></span>
-                    <span id="agentActiveLabel">Agent 1 of 5</span>
+                <div class="progress-meta-badges">
+                    <div class="agent-est-badge">
+                        <span>⏱️ Est. ~70s</span>
+                    </div>
+                    <div class="agent-time-badge" id="agentTotalTimeBadge">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span id="agentTotalTimer">0.0s</span>
+                    </div>
+                    <div class="agent-active-badge">
+                        <span class="pulse-dot"></span>
+                        <span id="agentActiveLabel">Agent 1 of 5</span>
+                    </div>
                 </div>
+            </div>
+
+            <div class="flow-est-notice" id="flowEstNotice">
+                <span class="flow-est-icon">⏳</span>
+                <span>Estimated total time: <strong>~70 seconds</strong> as 5 AI agents fetch live flight, hotel, and weather data. Please do not reload.</span>
             </div>
 
             <div class="stepper-wrapper">
@@ -133,6 +150,7 @@
                         <div class="step-label-wrap">
                             <span class="step-title">Flights</span>
                             <span class="step-agent-name">AviationStack</span>
+                            <span class="step-time" id="step-time-1">--</span>
                         </div>
                     </div>
 
@@ -152,6 +170,7 @@
                         <div class="step-label-wrap">
                             <span class="step-title">Hotels</span>
                             <span class="step-agent-name">Tavily</span>
+                            <span class="step-time" id="step-time-2">--</span>
                         </div>
                     </div>
 
@@ -171,6 +190,7 @@
                         <div class="step-label-wrap">
                             <span class="step-title">Weather</span>
                             <span class="step-agent-name">OpenWeather</span>
+                            <span class="step-time" id="step-time-3">--</span>
                         </div>
                     </div>
 
@@ -190,6 +210,7 @@
                         <div class="step-label-wrap">
                             <span class="step-title">Itinerary</span>
                             <span class="step-agent-name">Groq LLM</span>
+                            <span class="step-time" id="step-time-4">--</span>
                         </div>
                     </div>
 
@@ -209,6 +230,7 @@
                         <div class="step-label-wrap">
                             <span class="step-title">Finalize</span>
                             <span class="step-agent-name">Gemini LLM</span>
+                            <span class="step-time" id="step-time-5">--</span>
                         </div>
                     </div>
                 </div>
@@ -256,7 +278,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Your Custom JS -->
-    <script src="/static/script.js?v=2.4"></script>
+    <script src="/static/script.js?v=2.7"></script>
 
 </body>
 </html>

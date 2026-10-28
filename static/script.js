@@ -1,5 +1,15 @@
 let currentThreadId = localStorage.getItem("travel_thread_id") || null;
 let latestAnswerMarkdown = "";
+let isGeneratingPlan = false;
+
+// Warn user if they attempt to reload or navigate away while generating plan
+window.addEventListener("beforeunload", function(event) {
+    if (isGeneratingPlan) {
+        event.preventDefault();
+        event.returnValue = "A travel plan is currently being generated. If you reload or leave now, progress will be lost. Are you sure you want to leave?";
+        return event.returnValue;
+    }
+});
 
 const AgentWorkflowStepper = {
     steps: [
@@ -10,7 +20,7 @@ const AgentWorkflowStepper = {
             agent: "Flight Agent",
             status: "Flight Agent is analyzing optimal routes & airports via AviationStack...",
             percent: 0,
-            duration: 4500
+            duration: 34000
         },
         {
             num: 2,
@@ -19,7 +29,7 @@ const AgentWorkflowStepper = {
             agent: "Hotel Agent",
             status: "Hotel Agent is discovering top stays & rates via Tavily...",
             percent: 25,
-            duration: 4500
+            duration: 6500
         },
         {
             num: 3,
@@ -28,7 +38,7 @@ const AgentWorkflowStepper = {
             agent: "Weather Agent",
             status: "Weather Agent is checking live forecast & climate via OpenWeather...",
             percent: 50,
-            duration: 4500
+            duration: 9500
         },
         {
             num: 4,
@@ -37,7 +47,7 @@ const AgentWorkflowStepper = {
             agent: "Itinerary Agent",
             status: "Itinerary Agent is generating day-by-day travel plan with Groq...",
             percent: 75,
-            duration: 5500
+            duration: 7500
         },
         {
             num: 5,
@@ -51,6 +61,42 @@ const AgentWorkflowStepper = {
     ],
     currentIndex: 0,
     timers: [],
+    totalStartTime: null,
+    stepStartTimes: [null, null, null, null, null],
+    stepDurations: [null, null, null, null, null],
+    tickInterval: null,
+
+    startTimerTick() {
+        this.stopTimerTick();
+        this.tickInterval = setInterval(() => {
+            const now = performance.now();
+
+            // Update overall query elapsed time in flow box header
+            if (this.totalStartTime) {
+                const totalSec = ((now - this.totalStartTime) / 1000).toFixed(1);
+                const totalTimerEl = document.getElementById("agentTotalTimer");
+                if (totalTimerEl) {
+                    totalTimerEl.textContent = `${totalSec}s`;
+                }
+            }
+
+            // Update currently active step's live running timer
+            if (this.currentIndex !== null && this.stepStartTimes[this.currentIndex]) {
+                const stepSec = ((now - this.stepStartTimes[this.currentIndex]) / 1000).toFixed(1);
+                const stepTimerEl = document.getElementById(`step-time-${this.currentIndex + 1}`);
+                if (stepTimerEl) {
+                    stepTimerEl.textContent = `${stepSec}s`;
+                }
+            }
+        }, 100);
+    },
+
+    stopTimerTick() {
+        if (this.tickInterval) {
+            clearInterval(this.tickInterval);
+            this.tickInterval = null;
+        }
+    },
 
     start() {
         this.reset();
@@ -60,15 +106,64 @@ const AgentWorkflowStepper = {
             section.style.display = "block";
             section.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }
+
+        const now = performance.now();
+        this.totalStartTime = now;
+        this.stepStartTimes = [now, null, null, null, null];
+        this.stepDurations = [null, null, null, null, null];
+
+        for (let i = 1; i <= 5; i++) {
+            const el = document.getElementById(`step-time-${i}`);
+            if (el) {
+                el.textContent = i === 1 ? "0.0s" : "--";
+                el.classList.remove("active", "completed");
+            }
+        }
+        const badge = document.getElementById("agentTotalTimeBadge");
+        if (badge) badge.classList.remove("completed");
+
+        const notice = document.getElementById("flowEstNotice");
+        if (notice) {
+            notice.classList.remove("completed");
+            notice.innerHTML = `<span class="flow-est-icon">⏳</span><span>Estimated total time: <strong>~70 seconds</strong> as 5 AI agents fetch live flight, hotel, and weather data. Please do not reload.</span>`;
+        }
+
         this.goToStep(0);
+        this.startTimerTick();
         this.scheduleNext(0);
     },
 
     goToStep(index) {
         if (index < 0 || index >= this.steps.length) return;
-        this.currentIndex = index;
-        const current = this.steps[index];
+        const now = performance.now();
+        const prev = this.currentIndex;
 
+        // If transitioning from a previous step, freeze its duration
+        if (prev !== null && prev !== index) {
+            if (this.stepStartTimes[prev] && !this.stepDurations[prev]) {
+                const dur = ((now - this.stepStartTimes[prev]) / 1000).toFixed(1);
+                this.stepDurations[prev] = `${dur}s`;
+                const prevTimerEl = document.getElementById(`step-time-${prev + 1}`);
+                if (prevTimerEl) {
+                    prevTimerEl.textContent = `${dur}s`;
+                    prevTimerEl.classList.remove("active");
+                    prevTimerEl.classList.add("completed");
+                }
+            }
+        }
+
+        this.currentIndex = index;
+        if (!this.stepStartTimes[index]) {
+            this.stepStartTimes[index] = now;
+        }
+
+        const currentTimerEl = document.getElementById(`step-time-${index + 1}`);
+        if (currentTimerEl) {
+            currentTimerEl.classList.add("active");
+            currentTimerEl.classList.remove("completed");
+        }
+
+        const current = this.steps[index];
         const statusText = document.getElementById("agentStatusText");
         const activeLabel = document.getElementById("agentActiveLabel");
         const trackFill = document.getElementById("stepperTrackFill");
@@ -126,6 +221,19 @@ const AgentWorkflowStepper = {
         if (nodeName in nodeMap) {
             this.clearTimers();
             const index = nodeMap[nodeName];
+            const now = performance.now();
+
+            if (this.stepStartTimes[index] && !this.stepDurations[index]) {
+                const dur = ((now - this.stepStartTimes[index]) / 1000).toFixed(1);
+                this.stepDurations[index] = `${dur}s`;
+                const stepTimerEl = document.getElementById(`step-time-${index + 1}`);
+                if (stepTimerEl) {
+                    stepTimerEl.textContent = `${dur}s`;
+                    stepTimerEl.classList.remove("active");
+                    stepTimerEl.classList.add("completed");
+                }
+            }
+
             const stepEl = document.getElementById(`step-${index + 1}`);
             if (stepEl) {
                 stepEl.classList.remove("active");
@@ -155,14 +263,46 @@ const AgentWorkflowStepper = {
     },
 
     complete() {
+        this.stopTimerTick();
         this.clearTimers();
+
+        const now = performance.now();
+        const totalDuration = this.totalStartTime
+            ? ((now - this.totalStartTime) / 1000).toFixed(1) + "s"
+            : "--";
+
+        // Freeze any un-frozen step durations
+        for (let i = 0; i < 5; i++) {
+            if (!this.stepDurations[i] && this.stepStartTimes[i]) {
+                const dur = ((now - this.stepStartTimes[i]) / 1000).toFixed(1);
+                this.stepDurations[i] = `${dur}s`;
+            }
+            const timerEl = document.getElementById(`step-time-${i + 1}`);
+            if (timerEl) {
+                if (this.stepDurations[i]) {
+                    timerEl.textContent = this.stepDurations[i];
+                }
+                timerEl.classList.remove("active");
+                timerEl.classList.add("completed");
+            }
+        }
+
         const trackFill = document.getElementById("stepperTrackFill");
         const statusText = document.getElementById("agentStatusText");
         const activeLabel = document.getElementById("agentActiveLabel");
+        const totalTimerEl = document.getElementById("agentTotalTimer");
+        const totalBadge = document.getElementById("agentTotalTimeBadge");
+        const notice = document.getElementById("flowEstNotice");
 
         if (trackFill) trackFill.style.width = "100%";
-        if (statusText) statusText.textContent = "🎉 All travel agents completed! Travel itinerary ready.";
-        if (activeLabel) activeLabel.textContent = "Complete (5/5)";
+        if (totalTimerEl) totalTimerEl.textContent = `⚡ ${totalDuration}`;
+        if (totalBadge) totalBadge.classList.add("completed");
+        if (activeLabel) activeLabel.textContent = `Completed (5/5)`;
+        if (statusText) statusText.textContent = `🎉 Travel plan generated in ${totalDuration}! All 5 agents completed.`;
+        if (notice) {
+            notice.classList.add("completed");
+            notice.innerHTML = `<span class="flow-est-icon">🎉</span><span>Multi-agent workflow completed in <strong>${totalDuration}</strong>! Full travel plan generated below.</span>`;
+        }
 
         for (let i = 1; i <= 5; i++) {
             const stepEl = document.getElementById(`step-${i}`);
@@ -177,11 +317,17 @@ const AgentWorkflowStepper = {
     },
 
     error(msg) {
+        this.stopTimerTick();
         this.clearTimers();
         const statusText = document.getElementById("agentStatusText");
         const activeLabel = document.getElementById("agentActiveLabel");
+        const notice = document.getElementById("flowEstNotice");
         if (statusText) statusText.textContent = `⚠️ Error: ${msg || "Agent workflow encountered an issue"}`;
         if (activeLabel) activeLabel.textContent = "Error";
+        if (notice) {
+            notice.classList.remove("completed");
+            notice.innerHTML = `<span class="flow-est-icon">⚠️</span><span>Workflow halted: <strong>${msg || "Agent workflow encountered an issue"}</strong></span>`;
+        }
     },
 
     clearTimers() {
@@ -190,10 +336,33 @@ const AgentWorkflowStepper = {
     },
 
     reset() {
+        this.stopTimerTick();
         this.clearTimers();
         this.currentIndex = 0;
+        this.totalStartTime = null;
+        this.stepStartTimes = [null, null, null, null, null];
+        this.stepDurations = [null, null, null, null, null];
+
         const trackFill = document.getElementById("stepperTrackFill");
         if (trackFill) trackFill.style.width = "0%";
+        const totalTimerEl = document.getElementById("agentTotalTimer");
+        if (totalTimerEl) totalTimerEl.textContent = "0.0s";
+        const totalBadge = document.getElementById("agentTotalTimeBadge");
+        if (totalBadge) totalBadge.classList.remove("completed");
+
+        const notice = document.getElementById("flowEstNotice");
+        if (notice) {
+            notice.classList.remove("completed");
+            notice.innerHTML = `<span class="flow-est-icon">⏳</span><span>Estimated total time: <strong>~70 seconds</strong> as 5 AI agents fetch live flight, hotel, and weather data. Please do not reload.</span>`;
+        }
+
+        for (let i = 1; i <= 5; i++) {
+            const el = document.getElementById(`step-time-${i}`);
+            if (el) {
+                el.textContent = "--";
+                el.classList.remove("active", "completed");
+            }
+        }
     }
 };
 
@@ -277,6 +446,7 @@ async function sendMessage() {
     }
 
     setLoading(true);
+    isGeneratingPlan = true;
     AgentWorkflowStepper.start();
 
     try {
@@ -378,6 +548,7 @@ async function sendMessage() {
             showError(fbErr.message);
         }
     } finally {
+        isGeneratingPlan = false;
         setLoading(false);
     }
 }
