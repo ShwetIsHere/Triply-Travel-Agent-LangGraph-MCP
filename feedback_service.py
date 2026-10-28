@@ -4,6 +4,10 @@ import re
 import time
 import uuid
 import secrets
+import smtplib
+import threading
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -14,8 +18,8 @@ BASE_DIR = Path(__file__).resolve().parent
 FEEDBACK_FILE = BASE_DIR / "triply_feedback.json"
 CREDENTIALS_FILE = BASE_DIR / "triply_log_in_pass.json"
 
-DEFAULT_USERNAME = os.getenv("ADMIN_USERNAME", "sosiyodarling")
-DEFAULT_PASSWORD = os.getenv("ADMIN_PASSWORD", "shwetpatel@2005")
+DEFAULT_USERNAME = os.getenv("ADMIN_USERNAME", "").strip().strip('\"\'')
+DEFAULT_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip().strip('\"\'')
 
 # In-memory admin active sessions: token -> expiry timestamp
 ADMIN_SESSIONS: dict[str, float] = {}
@@ -27,11 +31,14 @@ SESSION_TTL_SECONDS = 86400  # 24 hours
 # ============================================================================
 
 def ensure_credentials_file() -> dict:
-    """Ensure triply_log_in_pass.json exists with default or env credentials."""
+    """Ensure triply_log_in_pass.json exists with env credentials."""
+    env_user = os.getenv("ADMIN_USERNAME", "").strip().strip('\"\'')
+    env_pass = os.getenv("ADMIN_PASSWORD", "").strip().strip('\"\'')
+
     if not CREDENTIALS_FILE.exists():
         creds = {
-            "username": DEFAULT_USERNAME,
-            "password": DEFAULT_PASSWORD
+            "username": env_user,
+            "password": env_pass
         }
         with open(CREDENTIALS_FILE, "w", encoding="utf-8") as f:
             json.dump(creds, f, indent=2)
@@ -40,14 +47,17 @@ def ensure_credentials_file() -> dict:
     try:
         with open(CREDENTIALS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            if not isinstance(data, dict) or "username" not in data or "password" not in data:
+            if not isinstance(data, dict):
                 raise ValueError("Malformed credentials file")
+            if not data.get("username") and env_user:
+                data["username"] = env_user
+            if not data.get("password") and env_pass:
+                data["password"] = env_pass
             return data
     except Exception:
-        # Fallback and recover if corrupted
         creds = {
-            "username": DEFAULT_USERNAME,
-            "password": DEFAULT_PASSWORD
+            "username": env_user,
+            "password": env_pass
         }
         with open(CREDENTIALS_FILE, "w", encoding="utf-8") as f:
             json.dump(creds, f, indent=2)
@@ -60,10 +70,19 @@ def get_admin_credentials() -> dict:
 
 def verify_admin_login(username: str, password: str) -> bool:
     creds = get_admin_credentials()
-    return (
-        creds.get("username", "").strip() == username.strip()
-        and creds.get("password", "") == password
-    )
+    stored_user = creds.get("username", "").strip()
+    stored_pass = creds.get("password", "")
+
+    env_user = os.getenv("ADMIN_USERNAME", "").strip().strip('\"\'')
+    env_pass = os.getenv("ADMIN_PASSWORD", "").strip().strip('\"\'')
+
+    valid_user = stored_user or env_user
+    valid_pass = stored_pass or env_pass
+
+    if not valid_user or not valid_pass:
+        return False
+
+    return username.strip() == valid_user and password == valid_pass
 
 
 def update_admin_password(current_password: str, new_password: str) -> tuple[bool, str]:
@@ -127,6 +146,201 @@ def get_all_feedbacks() -> list[dict]:
         return []
 
 
+def send_feedback_email_sync(entry: dict):
+    """
+    Sends an email alert using Gmail SMTP.
+    Works with Google App Passwords (16 characters).
+    """
+    smtp_user = os.getenv("SMTP_EMAIL", "").strip().strip('\"\'')
+    smtp_pass = os.getenv("SMTP_APP_PASSWORD", "").replace(" ", "").strip().strip('\"\'')
+    admin_to = os.getenv("ADMIN_NOTIFICATION_EMAIL", "").strip().strip('\"\'') or smtp_user
+
+    if not smtp_user or not smtp_pass or not admin_to:
+        print("[Email Notification] SMTP_EMAIL or SMTP_APP_PASSWORD not configured. Skipping email dispatch.")
+        return False
+
+    try:
+        user_email = entry.get("email", "Anonymous")
+        feedback_msg = entry.get("feedback", "")
+        created_at = entry.get("created_at", "")
+        entry_id = entry.get("id", "")
+        timestamp = entry.get("timestamp", "")
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"🔔 [Triply AI] New Feedback from {user_email}"
+        msg["From"] = f"Triply AI <{smtp_user}>"
+        msg["To"] = admin_to
+
+        plain_text = (
+            f"New User Feedback Received on Triply AI\n"
+            f"=========================================\n\n"
+            f"Email ID:        {user_email}\n"
+            f"Date & Time:     {created_at}\n"
+            f"Timestamp:       {timestamp}\n"
+            f"Feedback ID:     {entry_id}\n\n"
+            f"User Feedback:\n"
+            f"-----------------------------------------\n"
+            f"{feedback_msg}\n"
+            f"-----------------------------------------\n"
+        )
+
+        html_text = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f1f5f9;
+      margin: 0;
+      padding: 24px;
+      color: #0f172a;
+    }}
+    .email-container {{
+      max-width: 580px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 18px;
+      border: 1px solid #e2e8f0;
+      overflow: hidden;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
+    }}
+    .email-header {{
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: #ffffff;
+      padding: 24px 28px;
+    }}
+    .email-header h2 {{
+      margin: 0 0 6px 0;
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }}
+    .email-header p {{
+      margin: 0;
+      font-size: 0.9rem;
+      opacity: 0.92;
+    }}
+    .email-body {{
+      padding: 28px;
+    }}
+    .meta-box {{
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin-bottom: 22px;
+    }}
+    .meta-row {{
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 0.88rem;
+    }}
+    .meta-row:last-child {{
+      border-bottom: none;
+    }}
+    .meta-label {{
+      color: #64748b;
+      font-weight: 600;
+    }}
+    .meta-val {{
+      color: #0f172a;
+      font-weight: 700;
+    }}
+    .feedback-label {{
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: #334155;
+      margin-bottom: 10px;
+    }}
+    .feedback-quote {{
+      background: #f8fafc;
+      border-left: 4px solid #0284c7;
+      padding: 18px 20px;
+      border-radius: 10px;
+      font-size: 0.96rem;
+      line-height: 1.65;
+      color: #1e293b;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }}
+    .email-footer {{
+      padding: 18px 28px;
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      font-size: 0.82rem;
+      color: #94a3b8;
+      text-align: center;
+    }}
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      <h2>✈️ Triply AI — User Feedback</h2>
+      <p>A new feedback was submitted on travel.heyshwet.me</p>
+    </div>
+    <div class="email-body">
+      <div class="meta-box">
+        <div class="meta-row">
+          <span class="meta-label">Submitter Email:</span>
+          <span class="meta-val">{user_email}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Date & Time:</span>
+          <span class="meta-val">{created_at}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Feedback ID:</span>
+          <span class="meta-val">{entry_id}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Timestamp:</span>
+          <span class="meta-val">{timestamp}</span>
+        </div>
+      </div>
+
+      <div class="feedback-label">User Feedback:</div>
+      <div class="feedback-quote">{feedback_msg}</div>
+    </div>
+    <div class="email-footer">
+      Automated feedback alert from your Triply AI deployment.
+    </div>
+  </div>
+</body>
+</html>"""
+
+        msg.attach(MIMEText(plain_text, "plain", "utf-8"))
+        msg.attach(MIMEText(html_text, "html", "utf-8"))
+
+        # Try Port 465 SSL first; fallback to Port 587 STARTTLS
+        try:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=12) as server:
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(smtp_user, [admin_to], msg.as_string())
+        except Exception as ssl_err:
+            print(f"[Email Notification] Port 465 SSL failed ({ssl_err}), trying Port 587 STARTTLS...")
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=12) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(smtp_user, [admin_to], msg.as_string())
+
+        print(f"[Email Notification] Successfully dispatched feedback alert to {admin_to}")
+        return True
+
+    except Exception as e:
+        print(f"[Email Notification Error] Failed to send feedback alert: {e}")
+        return False
+
+
+def send_feedback_email_async(entry: dict):
+    """Dispatches the email in a background daemon thread so HTTP response is instant."""
+    thread = threading.Thread(target=send_feedback_email_sync, args=(entry,), daemon=True)
+    thread.start()
+
+
 def save_feedback(email: str, feedback_text: str) -> dict:
     ensure_feedback_file()
     feedbacks = get_all_feedbacks()
@@ -145,6 +359,9 @@ def save_feedback(email: str, feedback_text: str) -> dict:
 
     with open(FEEDBACK_FILE, "w", encoding="utf-8") as f:
         json.dump(feedbacks, f, indent=2)
+
+    # Instantly trigger background email notification without slowing down HTTP response
+    send_feedback_email_async(new_entry)
 
     return new_entry
 
